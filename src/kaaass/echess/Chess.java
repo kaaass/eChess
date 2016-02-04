@@ -33,7 +33,7 @@ public class Chess implements Cloneable {
 	private int x = 0;
 	private int y = 0;
 	private boolean hasMove = false;
-	private int endanger = -1; // 0 for black, 1 for white.
+	private static Chess shooter = null; // The one which shoot the king.
 
 	private Chess(int x, int y) {
 		this.x = x;
@@ -110,7 +110,7 @@ public class Chess implements Cloneable {
 		} else {
 			path += "white\\";
 		}
-		path += this.name + this;
+		path += this.name + ".png";
 		return new File(path);
 	}
 
@@ -119,24 +119,22 @@ public class Chess implements Cloneable {
 		int[] temp = { this.x, this.y };
 		switch (this.score) {
 		case 1: // Pawn
-			if (!this.hasMove) { // At the beginning, the pawn could able to move 2
+			if (!this.hasMove) { // At the beginning, the pawn could able to
+									// move 2
 				temp[1] += this.isBlack ? -2 : 2;
 				result.add(temp.clone());
 			}
 			temp[1] = this.y;
-			result.addAll(PositionUtils.getPos(temp, this.action));
-			temp[0] = this.x;
-			temp[1] = this.y;
-			for (int[] a : PositionUtils.getPos(temp, this.attack)) {
+			result.addAll(PositionUtils.getPos(this, temp, this.action));
+			for (int[] a : PositionUtils.getPos(this, temp, this.attack))
 				if (PositionUtils.inside(a)
 						&& Chessboard.getChessByPosition(a[0], a[1]) != null)
 					result.add(a);
-			}
 			// In passing pawn
 			if (this.isBlack ? this.y <= 3 : this.y >= 4) {
 				Chess c = Chessboard.getChessByPosition(this.x - 1, this.y);
 				if (c != null) {
-					if (c.isPawn() && (this.isBlack ^ c.isBlack)) {
+					if (c.isPawn() && (this.isBlack != c.isBlack)) {
 						temp[0] = this.x - 1;
 						temp[1] = this.y + (this.isBlack ? -1 : 1);
 						result.add(temp.clone());
@@ -144,7 +142,7 @@ public class Chess implements Cloneable {
 				}
 				c = Chessboard.getChessByPosition(this.x + 1, this.y);
 				if (c != null) {
-					if (c.isPawn() && (this.isBlack ^ c.isBlack)) {
+					if (c.isPawn() && (this.isBlack != c.isBlack)) {
 						temp[0] = this.x + 1;
 						temp[1] = this.y + (this.isBlack ? -1 : 1);
 						result.add(temp.clone());
@@ -152,8 +150,69 @@ public class Chess implements Cloneable {
 				}
 			}
 			break;
+		case 2: // knight
+			temp[0] = this.x + 1;
+			temp[1] = this.y + 2;
+			if (PositionUtils.isPosStandable(this, temp))
+				result.add(temp.clone());
+			temp[1] = this.y - 2;
+			if (PositionUtils.isPosStandable(this, temp))
+				result.add(temp.clone());
+			temp[0] = this.x - 1;
+			if (PositionUtils.isPosStandable(this, temp))
+				result.add(temp.clone());
+			temp[1] = this.y + 2;
+			if (PositionUtils.isPosStandable(this, temp))
+				result.add(temp.clone());
+			temp[0] = this.x + 2;
+			temp[1] = this.y + 1;
+			if (PositionUtils.isPosStandable(this, temp))
+				result.add(temp.clone());
+			temp[1] = this.y - 1;
+			if (PositionUtils.isPosStandable(this, temp))
+				result.add(temp.clone());
+			temp[0] = this.x - 2;
+			if (PositionUtils.isPosStandable(this, temp))
+				result.add(temp.clone());
+			temp[1] = this.y + 1;
+			if (PositionUtils.isPosStandable(this, temp))
+				result.add(temp.clone());
+			break;
+		default:
+			if (this.limit) {
+				result.addAll(PositionUtils.getPos(this, temp, this.action));
+			} else {
+				for (int d : this.action)
+					result.addAll(PositionUtils.directionToLine(this, temp, d));
+			}
 		}
-		return result;
+		if (shooter != null) {
+			List<int[]> r2 = new ArrayList<int[]>();
+			if (shooter.isBlack() != this.isBlack) {
+				if (this.score == 6) {
+					for (int[] pos : PositionUtils.getPos(this,
+							this.getPosition(), this.action))
+						if (!PositionUtils.getDangerous().contains(pos))
+							r2.add(pos);
+				} else {
+					if (shooter.score == 1 || shooter.score == 2) {
+						if (result.contains(shooter.getPosition()))
+							r2.add(shooter.getPosition());
+					} else {
+
+						List<int[]> sAttackKing = PositionUtils
+								.attackKings(shooter);
+						for (int[] a : sAttackKing) {
+							if (result.contains(a))
+								r2.add(shooter.getPosition());
+						}
+					}
+				}
+			}
+			return r2;
+		} else {
+			return result;
+		}
 	}
 
 	public void moveTo(int x, int y) {
@@ -167,12 +226,21 @@ public class Chess implements Cloneable {
 		return this.score == 1;
 	}
 
+	public boolean isBlack() {
+		return this.isBlack;
+	}
+
 	public String getXPosition() {
 		return String.valueOf(this.x + 1);
 	}
 
 	public String getYPosition() {
 		return String.valueOf((char) (65 + this.y));
+	}
+
+	private int[] getPosition() {
+		int[] a = { this.x, this.y };
+		return a;
 	}
 
 	@Override
@@ -215,7 +283,7 @@ public class Chess implements Cloneable {
 
 	@Override
 	public Object clone() throws CloneNotSupportedException {
-		Chess c = point(x, y);
+		Chess c = (Chess) super.clone();
 		c.action = this.action.clone();
 		c.attack = this.attack.clone();
 		return c;
